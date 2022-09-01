@@ -4,8 +4,8 @@
 extern crate confy;
 extern crate reqwest;
 
-use std::env;
-use std::path::Path;
+use std::{env, fs};
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io;
 use serde::{Serialize, Deserialize};
@@ -46,16 +46,27 @@ fn download_file(url : &str, dest : &str) {
                     .and_then(|segments| segments.last())
                     .and_then(|name| if name.is_empty() { None } else { Some(name) })
                     .unwrap_or("tmp.bin");
-    let out_path = Path::new(dest).join(filename);
-    println!("{}", out_path.to_str().unwrap());
-    let mut out_file = File::create(out_path).expect("Failed to create output file");
-    io::copy(&mut response, &mut out_file).expect("failed to copy content of downloaded file");
+    let out_path = Path::new(dest);
+    let file_path: PathBuf = match out_path.try_exists() {
+        Ok(k) => match k {
+            true => {out_path.join(filename)},
+            false => {
+                fs::create_dir_all(out_path).expect("Failed to create tmp path");
+                out_path.join(filename)
+            }
+        },
+        Err(e) => panic!("{}", e),
+    };
+    println!("{}", file_path.to_str().unwrap());
+    let mut out_file = File::create(file_path)
+                            .expect("Failed to create output file");
+    io::copy(&mut response, &mut out_file)
+            .expect("failed to copy content of downloaded file");
 }
 
 fn main() -> Result<(), confy::ConfyError> {
     println!("Starting rUpdater...");
     let args : Vec<String> = env::args().collect();
-
     if args.len() == 0 {
 
     }
