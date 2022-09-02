@@ -6,10 +6,11 @@ extern crate reqwest;
 
 use std::{env, fs};
 use std::path::{Path, PathBuf};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io;
-use serde::{Serialize, Deserialize};
 
+use serde::{Serialize, Deserialize};
+use zip::ZipArchive;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RuConfig {
@@ -38,7 +39,17 @@ impl Default for RuConfig {
     }
 }
 
-fn download_file(url : &str, dest : &str) {
+fn unzip_file(file : File, dest : &str) {
+    let dest_path = Path::new(dest);
+    let mut archive = ZipArchive::new(file).expect("Failed to open Zip file");
+
+    for i in 0..archive.len() {
+        let zfile = archive.by_index(i).expect("Failed get compressed file");
+        println!("File {} Name: {}, Last_Modified: {:?}", i, zfile.name(), zfile.last_modified());
+    }
+}
+
+fn download_file(url : &str, dest : &str) -> File {
     let mut response = reqwest::blocking::get(url).expect("Failed connect to server");
     let filename = response
                     .url()
@@ -47,6 +58,7 @@ fn download_file(url : &str, dest : &str) {
                     .and_then(|name| if name.is_empty() { None } else { Some(name) })
                     .unwrap_or("tmp.bin");
     let out_path = Path::new(dest);
+    // TODO: Find better way to check if diretories exist (maybe a more rustian)
     let file_path: PathBuf = match out_path.try_exists() {
         Ok(k) => match k {
             true => {out_path.join(filename)},
@@ -58,10 +70,15 @@ fn download_file(url : &str, dest : &str) {
         Err(e) => panic!("{}", e),
     };
     println!("{}", file_path.to_str().unwrap());
-    let mut out_file = File::create(file_path)
-                            .expect("Failed to create output file");
+    let mut out_file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(file_path).expect("Failed to open output file");
+
     io::copy(&mut response, &mut out_file)
-            .expect("failed to copy content of downloaded file");
+            .expect("failed to write content of downloaded file to disk");
+    return out_file;
 }
 
 fn main() -> Result<(), confy::ConfyError> {
@@ -74,6 +91,7 @@ fn main() -> Result<(), confy::ConfyError> {
     let conf : RuConfig = confy::load("rupdater")?;
     dbg!(&conf);
     println!("Download zip file from {}", &conf.zipurl);
-    download_file(&conf.zipurl, &conf.tmppath);
+    let zipfile = download_file(&conf.zipurl, &conf.tmppath);
+    unzip_file(zipfile, &conf.destpath);
     Ok(())
 }
