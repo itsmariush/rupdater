@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 extern crate confy;
 extern crate reqwest;
 
@@ -42,10 +39,19 @@ impl Default for RuConfig {
 fn unzip_file(file : File, dest : &str) {
     let dest_path = Path::new(dest);
     let mut archive = ZipArchive::new(file).expect("Failed to open Zip file");
-
+    println!("Unzip files to {}", dest_path.to_str().unwrap());
     for i in 0..archive.len() {
         let zfile = archive.by_index(i).expect("Failed get compressed file");
         println!("File {} Name: {}, Last_Modified: {:?}", i, zfile.name(), zfile.last_modified());
+        let outpath = match zfile.enclosed_name() {
+            Some(path) => path.to_owned(),
+            None => continue,
+        };
+        println!("Zipped File name: {}", zfile.name());
+        if zfile.name().ends_with('/') {
+            println!("Is directory {:?}", dest_path.join(outpath));
+            //fs::create_dir_all(&outpath).expect("Could not create directories to unzip");
+        }
     }
 }
 
@@ -70,6 +76,7 @@ fn download_file(url : &str, dest : &str) -> File {
         Err(e) => panic!("{}", e),
     };
     println!("{}", file_path.to_str().unwrap());
+    // Open File in read-write-create mode
     let mut out_file = OpenOptions::new()
                         .read(true)
                         .write(true)
@@ -92,6 +99,6 @@ fn main() -> Result<(), confy::ConfyError> {
     dbg!(&conf);
     println!("Download zip file from {}", &conf.zipurl);
     let zipfile = download_file(&conf.zipurl, &conf.tmppath);
-    unzip_file(zipfile, &conf.destpath);
+    unzip_file(zipfile, &conf.tmppath);
     Ok(())
 }
